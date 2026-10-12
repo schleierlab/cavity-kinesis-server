@@ -8,6 +8,7 @@ Created on Thu Oct 04 17:53:55 2018
 import sys
 import time
 import zprocess
+import labscript_utils.h5_lock
 import h5py
 import numpy as np
 import matplotlib.pyplot as plt

@@ -8,12 +8,12 @@ Created on Thu Oct 04 17:53:55 2018
 import sys
 import time
 import zprocess
-import h5py
 import numpy as np
 import matplotlib.pyplot as plt
 import os
 import clr
 from device_server import DeviceServer
+import h5py
 
 sys.path.append(r"C:\Program Files\Thorlabs\Kinesis")
 clr.AddReference("Thorlabs.MotionControl.DeviceManagerCLI")
@@ -23,26 +23,26 @@ from Thorlabs.MotionControl.KCube.InertialMotorCLI import *
 
 
 class KCubeController:
-    def __init__(self, serial_number):
+    def __init__(self, serial_number, num_channels):
         DeviceManagerCLI.BuildDeviceList()
         serial_numbers = DeviceManagerCLI.GetDeviceList()
         print(f"Found serial numbers of conneccted controllers: {serial_numbers}")
         self.device = KCubeInertialMotor.CreateDevice(serial_number)
         self.device.Connect(serial_number)
+        self.device.StartPolling(250)
         device_info = self.device.GetDeviceInfo()
         print(f"Connected to device {device_info.Name} with serial number {serial_number}")
         self.max_move = 3000
+        self.channels = 1 + np.arange(num_channels)
         return
 
     def get_actual_positions(self):
-        channels = [1, 2, 3, 4]
-        self.positions = [self.device.GetPosition(i) for i in channels]
+        self.positions = [self.device.GetPosition(i) for i in self.channels]
         return self.positions
 
     def move_to_positions(self, positions):
-        channels = [1, 2, 3, 4]
-        assert len(positions) == len(channels), "position array has incorrect length"
-        for channel, position, current_pos in zip(channels, positions, self.positions):
+        assert len(positions) == len(self.channels), "position array has incorrect length"
+        for channel, position, current_pos in zip(self.channels, positions, self.positions):
             if position != current_pos:
                 if np.abs(position - current_pos) <= self.max_move:
                     self.device.MoveTo(channel, position, 0)
@@ -58,8 +58,11 @@ class KinesisServer(DeviceServer):
         print("Starting Kinesis Server")
         self.serials = serial_numbers
         self.variables = variable_names
-        self.controllers = [KCubeController(i) for i in self.serials]
+        self.controllers = [KCubeController(i, len(j)) for i, j in zip(self.serials, self.variables)]
         self.max_move_names = max_move_names
+        print("Started Kinesis Server")
+        actual_positions = [i.get_actual_positions() for i in self.controllers]
+        print(f"Actual positions are: {actual_positions}")
 
     def transition_to_buffered(self, h5_filepath):
         """
@@ -92,6 +95,8 @@ class KinesisServer(DeviceServer):
         shot, eg computing optical depth, fits, displaying images, saving
         images and results to the h5 file, returning cameras to an idle
         state."""
+        #actual_positions = [i.get_actual_positions() for i in self.controllers]
+        #print(f"Actual positions: {actual_positions}")
         print("transition to static")
 
     def abort(self):
@@ -108,13 +113,22 @@ class KinesisServer(DeviceServer):
         print("abort")
 
 
-serials = ["97100395"]
+serials = ["97100395", "97100364", "97100362"]
 global_names = [["Tweezers_Picomotor_1",
                  "Tweezers_Picomotor_2",
                  "Tweezers_Picomotor_3",
-                 "Tweezers_Picomotor_4"]]
+                 "Tweezers_Picomotor_4"],
+                 ["MOT_CH1",
+                 "MOT_CH2",
+                 "MOT_CH3",
+                 "MOT_CH4"],
+                 ["MOT_CH5",
+                 "MOT_CH6",
+                 "Raman_Picomotor_X",
+                 "Raman_Picomotor_Y"]]
 
-max_names = ["Tweezers_Picomotor_Max"]
+
+max_names = ["Tweezers_Picomotor_Max", "MOT_Picomotor_Max", "MOT_Picomotor_Max"]
 port = 7426
 assert len(serials) == len(global_names), "List of globals must be the same length as serial numbers"
 kserver = KinesisServer(global_names, serials, port, max_names)
